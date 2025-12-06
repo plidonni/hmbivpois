@@ -323,5 +323,34 @@ If you use or adapt this code for academic work, please cite the related
 paper describing the HMBivPois model and its application.
 </p>
 
+<p>
+The same HMBivPois framework (or closely related implementations) has been
+used in the following published applications:
+</p>
+
+<h2>10. References</h2>
+<ul>
+    <li>
+        Laudicella, Mauro, Paolo Li Donni, Karine R. Olsen, and Dorte Gyrd-Hansen. 2022.
+        “Age, Morbidity, or Something Else? A Residual Approach Using Microdata to Measure the Impact of Technological Progress on Health Care Expenditure.”
+        <em>Health Economics</em> 31 (6): 1184–1201.
+    </li>
+    <li>
+        Laudicella, Mauro, and Paolo Li Donni. 2022.
+        “The Dynamic Interdependence in the Demand of Primary and Emergency Secondary Care: A Hidden Markov Approach.”
+        <em>Journal of Applied Econometrics</em> 37 (3): 521–536.
+    </li>
+    <li>
+        Gomez-Ruiz, Manuel, Paolo Li Donni, and Maria Marino. 2025.
+        “Dynamics of Protest: Understanding Violent and Nonviolent Protest in Africa.”
+        <em>European Journal of Political Economy</em> 90: 102745.
+    </li>
+    <li>
+        Laudicella, Mauro, Paolo Li Donni, and Valeria Prete. 2024.
+        “Healthcare Utilisation by Diabetic Patients in Denmark: The Role of Primary Care in Reducing Emergency Visits.”
+        <em>Health Policy</em> 145: 105079.
+    </li>
+</ul>
+
 </body>
 </html>
