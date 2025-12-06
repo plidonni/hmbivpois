@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>README – Stata code for the HMBivPois model</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            line-height: 1.5;
+            margin: 2rem;
+            max-width: 900px;
+        }
+        h1, h2, h3 {
+            font-weight: 600;
+        }
+        code {
+            font-family: "Courier New", monospace;
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        ul, ol {
+            margin-left: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<h1>README – Stata code for the HMBivPois model</h1>
+
+<h2>1. Overview</h2>
+
+<p>
+    This folder contains Stata/Mata code to <strong>simulate</strong> and <strong>estimate</strong> a
+    Hidden Markov Bivariate Poisson (HMBivPois) model for two correlated count outcomes observed in panel form. This provides the code to replicate the model described in <em>"The substitution between primary and emergency care in individuals with chronic conditions: evidence from a structural model"
+	</em>
+</p>
+
+<p>
+Corresponding author for code development: Paolo Li Donni
+(<a href="mailto:paolo.lidonni@unipa.it">paolo.lidonni@unipa.it</a>).
+</p>
+
+<p>
+The code is organised as a self-contained example that can be used to:
+</p>
+
+<ul>
+    <li>generate synthetic panel data under a specified HMBivPois data-generating process (DGP);</li>
+    <li>estimate the parameters of the model by maximum likelihood;</li>
+    <li>serve as a template to adapt the model to empirical applications with a similar data structure.</li>
+</ul>
+
+<p>The model allows for:</p>
+
+<ul>
+    <li>two correlated count outcomes (<code>Y1</code>, <code>Y2</code>);</li>
+    <li>individual-level unobserved heterogeneity summarised by a finite number of latent Markov states;</li>
+    <li>dependence on covariates and on lagged outcomes in each equation;</li>
+    <li>flexible transition probabilities between latent states.</li>
+</ul>
+
+<hr>
+
+<h2>2. Files</h2>
+
+<p>The main files in this folder are:</p>
+
+<ul>
+    <li>
+        <code>est.do</code><br>
+        Master script that controls the whole example. It:
+        <ul>
+            <li>sets the working directory;</li>
+            <li>defines the data-generating parameters (number of individuals, periods,
+                latent states, and model coefficients);</li>
+            <li>calls the simulation program to create a synthetic panel dataset;</li>
+            <li>calls the estimation routine for the HMBivPois model and stores the resulting estimates.</li>
+        </ul>
+    </li>
+    <li>
+        <code>hmbivpois.do</code><br>
+        Stata/Mata code that defines the programs used in the example, including:
+        <ul>
+            <li>the simulation routine for the panel data (program <code>sim_bivmc</code>, called from <code>est.do</code>);</li>
+            <li>the estimation command <code>hmbivpois</code>, which implements maximum likelihood
+                estimation of the HMBivPois model.</li>
+        </ul>
+    </li>
+</ul>
+
+<p>Please refer to the header comments inside each <code>.do</code> file for more implementation details.</p>
+
+<hr>
+
+<h2>3. Software requirements</h2>
+
+<ul>
+    <li>Stata 18 (or later).<br>
+        The code was written and tested in Stata 18. Earlier versions might work
+        but have not been systematically checked.</li>
+</ul>
+
+<p>No additional user-written Stata packages are required; all numerical work is done in Mata.</p>
+
+<hr>
+
+<h2>4. Data structure</h2>
+
+<p>
+The simulated dataset produced by the scripts has one row per
+<strong>individual–time</strong> observation. The main variables are:
+</p>
+
+<ul>
+    <li><strong>Panel identifiers</strong>
+        <ul>
+            <li><code>id</code> – individual identifier (integer, 1, …, N);</li>
+            <li><code>cl</code> – cluster identifier (optional; can be used to group individuals);</li>
+            <li><code>time</code> – time index (1, …, T).</li>
+        </ul>
+    </li>
+    <li><strong>Outcomes and lags</strong>
+        <ul>
+            <li><code>Y1</code>  – first count outcome (equation 1);</li>
+            <li><code>LY1</code> – lagged value of <code>Y1</code>;</li>
+            <li><code>Y2</code>  – second count outcome (equation 2);</li>
+            <li><code>LY2</code> – lagged value of <code>Y2</code>.</li>
+        </ul>
+    </li>
+    <li><strong>Covariates</strong>
+        <ul>
+            <li><code>cov1</code> – first covariate (used in one or both outcome equations);</li>
+            <li><code>cov2</code> – second covariate (used in one or both outcome equations).</li>
+        </ul>
+    </li>
+</ul>
+
+<p>
+In a typical empirical application, <code>id</code>, <code>time</code>, <code>Y1</code>, <code>Y2</code>, their lags,
+and the covariates would be constructed from administrative or survey data.
+Here they are generated by the simulation routine so that they are
+consistent with the HMBivPois DGP.
+</p>
+
+<p>
+If you adapt the code to your own dataset, you only need to maintain the
+same logical roles for these variables (panel structure, two counts,
+corresponding lags, and covariates); their names can be modified accordingly
+in the call to <code>hmbivpois</code>.
+</p>
+
+<hr>
+
+<h2>5. Simulation program</h2>
+
+<p>
+The panel data simulation is handled by the Stata program <code>sim_bivmc</code>, which
+is called from <code>est.do</code>. Its role is to:
+</p>
+
+<ol>
+    <li>Draw initial latent states for each individual;</li>
+    <li>Generate a latent Markov chain over time, possibly depending on covariates;</li>
+    <li>For each individual and period, generate the two count outcomes (<code>Y1</code>, <code>Y2</code>)
+        from a bivariate Poisson distribution whose parameters depend on
+        covariates, lagged outcomes, and the current latent state;</li>
+    <li>Save the simulated panel in a Stata dataset (by default <code>data.dta</code>, or
+        with a user-specified file name).</li>
+</ol>
+
+<p>The basic syntax, as used inside <code>est.do</code>, is:</p>
+
+<pre><code>sim_bivmc, N(#) T(#) K(#) HET(string) [ SAVING(filename) ]
+</code></pre>
+
+<p>where:</p>
+
+<ul>
+    <li><code>N(#)</code> – number of individuals;</li>
+    <li><code>T(#)</code> – number of periods (including the initial period used to define
+        lags and the latent chain);</li>
+    <li><code>K(#)</code> – number of latent Markov states;</li>
+    <li><code>HET(string)</code> – option controlling the design of the transition
+        probabilities (for example, homogeneous vs. covariate-dependent; see the
+        comments in <code>est.do</code> and <code>hmbivpois.do</code>);</li>
+    <li><code>SAVING(filename)</code> – (optional) name of the output data file; if omitted,
+        a default such as <code>data.dta</code> is used.</li>
+</ul>
+
+<p>
+The values of <code>N</code>, <code>T</code>, <code>K</code>, the heterogeneity option, and all model
+parameters (intercepts, slopes, lag coefficients, dependence parameters,
+transition parameters, etc.) are set in <code>est.do</code> before calling <code>sim_bivmc</code>.
+</p>
+
+<p>
+Depending on the chosen values of <code>N</code>, <code>T</code>, and <code>K</code>, the simulation may take
+some time. Larger samples and more states naturally increase the computing burden.
+</p>
+
+<hr>
+
+<h2>6. Estimation command <code>hmbivpois</code></h2>
+
+<p>
+The estimation of the HMBivPois model is handled by the Stata command
+<code>hmbivpois</code>, defined in <code>hmbivpois.do</code>. At a high level, the syntax is:
+</p>
+
+<pre><code>hmbivpois (Y1 = x1vars) (Y2 = x2vars) , \
+    id(id) time(time) k(#) \
+    initcov(varlist) xtrans(varlist) [ other options ]
+</code></pre>
+
+<p>where:</p>
+
+<ul>
+    <li><code>(Y1 = x1vars)</code> – equation for the first count outcome;</li>
+    <li><code>(Y2 = x2vars)</code> – equation for the second count outcome;</li>
+    <li><code>id(id)</code> – panel identifier variable;</li>
+    <li><code>time(time)</code> – time variable ordering the observations within each individual;</li>
+    <li><code>k(#)</code> – number of latent Markov states;</li>
+    <li><code>initcov(varlist)</code> – covariates entering the initial state distribution;</li>
+    <li><code>xtrans(varlist)</code> – covariates entering the transition probabilities
+        between latent states.</li>
+</ul>
+
+<p>Additional options control, among other things:</p>
+
+<ul>
+    <li>the initialisation strategy (e.g. EM vs. direct optimisation);</li>
+    <li>the number of EM iterations used for starting values via the option <code>em(#)</code>
+        (default: <code>em(10)</code> if not specified);</li>
+    <li>the option <code>emonly</code>, which performs only the EM iterations without the final direct
+        maximisation step;</li>
+    <li>optimiser settings (technique, maximum number of iterations, etc.);</li>
+    <li>printing of intermediate output via the options <code>tracep</code>, <code>traceg</code> and <code>traceh</code>:
+        <ul>
+            <li><code>tracep</code> prints the parameter vector at each iteration;</li>
+            <li><code>traceg</code> prints (parts of) the gradient vector;</li>
+            <li><code>traceh</code> prints information related to the Hessian / Newton step.</li>
+        </ul>
+    </li>
+    <li>saving and re-using parameter estimates via the options <code>save(string)</code>,
+        <code>load(string)</code> and <code>EVALuate</code>, which allow you to store estimates to a Mata file,
+        reload them in a new run, and evaluate the likelihood at previously saved parameter values.</li>
+</ul>
+
+<p>
+Please see the comments at the top of <code>hmbivpois.do</code> for the precise list
+of supported options and for worked examples.
+</p>
+
+<hr>
+
+<h2>7. Running the complete example</h2>
+
+<ol>
+    <li>
+        <strong>Set the working directory</strong><br>
+        At the top of <code>est.do</code>, change the <code>cd</code> command so that it points to the
+        folder containing <code>est.do</code> and <code>hmbivpois.do</code>, for example:
+        <pre><code>cd "C:\\your\\path\\to\\folder"
+</code></pre>
+    </li>
+    <li>
+        <strong>Choose the simulation design</strong><br>
+        In <code>est.do</code>, set the main simulation parameters, for example:
+        <pre><code>local n    = 2000   // number of individuals
+local T    = 10     // number of periods
+local k    = 3      // number of latent states
+local het  = "HOM"  // type of transition heterogeneity
+</code></pre>
+        and define the matrices/scalars with the parameters of the outcome equations
+        and transition probabilities (see the comments in <code>est.do</code>).
+    </li>
+    <li>
+        <strong>Run the master script</strong><br>
+        In Stata, execute:
+        <pre><code>do est.do
+</code></pre>
+        This will:
+        <ul>
+            <li>clear the current Stata session;</li>
+            <li>simulate a panel dataset via <code>sim_bivmc</code> and save it to disk;</li>
+            <li>load the simulated data;</li>
+            <li>estimate the HMBivPois model via <code>hmbivpois</code> with the chosen number of
+                states and specification;</li>
+            <li>display the estimation output.</li>
+        </ul>
+    </li>
+    <li>
+        <strong>Inspect the results</strong><br>
+        After estimation, you can use standard Stata post-estimation commands to
+        extract coefficients, compute fitted values, or store results for later
+        use (e.g. with <code>estimates store</code>).
+    </li>
+</ol>
+
+<hr>
+
+<h2>8. Adapting the code to your own data</h2>
+
+<p>To use the HMBivPois code with a real-world dataset:</p>
+
+<ol>
+    <li>
+        <strong>Prepare your panel dataset</strong> so that it has:
+        <ul>
+            <li>a panel identifier (e.g. <code>id</code>);</li>
+            <li>a time variable (e.g. <code>time</code>);</li>
+            <li>two count outcomes (e.g. <code>Y1</code> and <code>Y2</code>);</li>
+            <li>their lags (<code>LY1</code>, <code>LY2</code>) if you want to include state dependence;</li>
+            <li>covariates for each equation and optional covariates for transition
+                probabilities.</li>
+        </ul>
+    </li>
+    <li>
+        <strong>Skip the simulation step</strong> in <code>est.do</code>. Instead of calling <code>sim_bivmc</code>,
+        simply <code>use</code> your own dataset and then call <code>hmbivpois</code> with the desired
+        specification.
+    </li>
+    <li>
+        <strong>Adjust the names of the variables</strong> in the <code>hmbivpois</code> call so that they
+        match the names used in your data.
+    </li>
+    <li>
+        <strong>Experiment with different numbers of states</strong> <code>k</code>, alternative
+        transition specifications, and different sets of covariates to assess
+        the robustness and interpretability of the latent states.
+    </li>
+</ol>
+
+<hr>
+
+<h2>9. Contact</h2>
+
+<p>For questions about the code or the underlying model, please contact:</p>
+
+<ul>
+    <li>Paolo Li Donni – University of Palermo<br>
+        Email: <a href="mailto:paolo.lidonni@unipa.it">paolo.lidonni@unipa.it</a></li>
+</ul>
+
+<p>
+If you use or adapt this code for academic work, please cite the related
+paper describing the HMBivPois model and its application.
+</p>
+
+</body>
+</html>
