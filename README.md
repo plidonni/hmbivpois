@@ -7,7 +7,7 @@
 
 <p>
     This folder contains Stata/Mata code to <strong>simulate</strong> and <strong>estimate</strong> a
-    Hidden Markov Bivariate Poisson (HMBivPois) model for two correlated count outcomes observed in panel form. This provides the code to replicate the model described in <em>"The substitution between primary and emergency care in individuals with chronic conditions: evidence from a structural model"
+    Hidden Markov Bivariate Poisson (HMBivPois) model for two correlated count outcomes observed in panel form.
 	</em>
 </p>
 
