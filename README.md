@@ -1,36 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>README – Stata code for the HMBivPois model</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            line-height: 1.5;
-            margin: 2rem;
-            max-width: 900px;
-        }
-        h1, h2, h3 {
-            font-weight: 600;
-        }
-        code {
-            font-family: "Courier New", monospace;
-            background-color: #f5f5f5;
-            padding: 2px 4px;
-            border-radius: 3px;
-        }
-        pre {
-            background-color: #f5f5f5;
-            padding: 0.75rem 1rem;
-            border-radius: 4px;
-            overflow-x: auto;
-        }
-        ul, ol {
-            margin-left: 1.5rem;
-        }
-    </style>
-</head>
+
 <body>
 
 <h1>README – Stata code for the HMBivPois model</h1>
