@@ -1,0 +1,5 @@
+v 3
+d Stata package hmbivpois
+d Paolo Li Donni
+d https://github.com/plidonni/hmbivpois
+p hmbivpois Hidden Markov bivariate Poisson regression for panel counts

@@ -1,0 +1,34 @@
+v 3
+d 'HMBIVPOIS': module to fit hidden Markov bivariate Poisson regression for panel counts
+d
+d hmbivpois fits the hidden Markov bivariate Poisson regression of
+d Laudicella and Li Donni (2022, Journal of Applied Econometrics 37: 521-536)
+d to two counts observed on the same individuals over time. Given a latent
+d state that follows a first-order Markov chain, the two counts have Poisson
+d margins whose means depend on regressors, on the lagged counts and on the
+d state. The dependence between the two counts is the Famoye form, the Frank
+d copula or the normal copula. Estimation is by the EM algorithm followed by
+d direct maximization. Postestimation: predict (means, posterior probabilities,
+d Viterbi path, joint probabilities) and estat (ic, transition, lrtrans,
+d stability, ame).
+d
+d KW: hidden Markov
+d KW: latent Markov
+d KW: bivariate Poisson
+d KW: count data
+d KW: panel data
+d KW: copula
+d
+d Requires: Stata version 16
+d
+d Author: Paolo Li Donni
+d Support: https://github.com/plidonni/hmbivpois
+d
+d Distribution-Date: 20261117
+d
+f hmbivpois.ado
+f hmbivpois_p.ado
+f hmbivpois_estat.ado
+f hmbivpois.sthlp
+f hmbivpois_example.dta
+f hmbivpois_examples.do
