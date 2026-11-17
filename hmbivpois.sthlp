@@ -87,6 +87,11 @@ lags of the first estimation period and the presample counts used in the initial
 not an estimation period. The periods of an individual must be consecutive. Regressors that are missing
 in the presample period are not a problem.
 
+{pstd}
+A technical guide with the model, the estimation method, the postestimation tools and Monte Carlo
+evidence is in {browse "https://github.com/plidonni/hmbivpois/blob/main/doc/hmbivpois_guide.pdf":doc/hmbivpois_guide.pdf}
+on the GitHub page of the command.
+
 
 {marker model}{...}
 {title:Model}
@@ -384,5 +389,8 @@ for panel counts. https://github.com/plidonni/hmbivpois.{p_end}
 
 {pstd}
 Paolo Li Donni{break}
+University of Palermo{break}
+{browse "mailto:paolo.lidonni@unipa.it":paolo.lidonni@unipa.it}{break}
+{browse "https://sites.google.com/site/plidonni/"}{break}
 {browse "https://github.com/plidonni/hmbivpois"}{break}
-Please report bugs and suggestions as issues on the GitHub page.{p_end}
+Please report bugs and suggestions by email.{p_end}

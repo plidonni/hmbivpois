@@ -1,0 +1,707 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathpazo}
+\usepackage{courier}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs,array,tabularx}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{upquote}
+\usepackage[authoryear,round]{natbib}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\lstset{basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true,
+  frame=single,framerule=0.3pt,rulecolor=\color{black!30},
+  backgroundcolor=\color{black!3},xleftmargin=0.6em,xrightmargin=0.6em,
+  aboveskip=0.8em,belowskip=0.8em,breaklines=true}
+\newcommand{\cmd}[1]{\texttt{#1}}
+\newcommand{\yv}{\mathbf y}
+\newcommand{\xv}{\mathbf x}
+\newcommand{\wv}{\mathbf w}
+\newcommand{\E}{\mathrm E}
+\setlength{\parskip}{0.35em}
+\setlength{\emergencystretch}{3em}
+
+\title{\textbf{hmbivpois}: hidden Markov bivariate Poisson regression\\ for panel counts in Stata\\[0.4em]
+\large Technical guide, version 1.0.0}
+\author{Paolo Li Donni\\ University of Palermo\\ \href{mailto:paolo.lidonni@unipa.it}{paolo.lidonni@unipa.it}}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent This guide documents the model, the estimation method and the postestimation tools of
+\cmd{hmbivpois}, a Stata command for the hidden Markov bivariate Poisson regression of
+\citet{laudicella2022}. The command models two counts observed on the same individuals over time. Given
+a latent state that follows a first-order Markov chain, the two counts have Poisson margins whose
+means depend on regressors, on the lagged counts and on the state; their dependence within the state
+is the form of \citet{lakshminarayana1999} and \citet{famoye2010}, the Frank copula or the normal
+copula. Estimation is by the EM algorithm with scaled forward--backward recursions, followed by direct
+maximization of the log likelihood. The guide also reports Monte Carlo evidence on the estimator and
+on the tests. The command, its help file and an example dataset are available at
+\url{https://github.com/plidonni/hmbivpois}.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+%=====================================================================
+\section{Introduction}
+%=====================================================================
+
+Many outcomes in health economics and elsewhere are pairs of counts recorded repeatedly on the same
+individuals: visits to a general practitioner and emergency admissions, doctor visits and hospital
+stays, claims of two types. Three sources of association link such counts over time and across the two
+outcomes: \emph{state dependence}, the effect of past counts on current ones, both within and between
+outcomes; \emph{unobserved heterogeneity}, which may change over time; and \emph{contemporaneous
+dependence}, common shocks that hit both counts in the same period.
+
+\citet{laudicella2022} propose a model that separates the three. Unobserved heterogeneity is a latent
+state that follows a first-order Markov chain, so that it can change over time; state dependence enters
+through the lagged counts; contemporaneous dependence is captured by a bivariate distribution with
+Poisson margins. \cmd{hmbivpois} implements this model and extends it in several directions: copula
+forms of the dependence, state-specific slopes, transformations of the lagged counts, transition
+probabilities that depend on covariates or on time, and a set of postestimation tools.
+
+Section~\ref{sec:model} presents the model, Section~\ref{sec:estimation} the likelihood and its
+estimation, Section~\ref{sec:post} inference and postestimation, Section~\ref{sec:command} the
+syntax of the command with examples, and Section~\ref{sec:mc} Monte Carlo evidence.
+
+%=====================================================================
+\section{The model}\label{sec:model}
+%=====================================================================
+
+\subsection{Data and notation}
+
+Individuals are indexed by $i=1,\dots,n$ and periods by $t=0,1,\dots,T_i$. For each individual and
+period we observe two counts $\yv_{it}=(y_{1it},y_{2it})$ and regressors $\xv_{1it}$, $\xv_{2it}$ for
+the two equations. The first observed period of each individual, $t=0$, is the \emph{presample
+period}: it supplies the lagged counts of period~1 and the presample counts $\yv_{i0}$ that enter the
+initial probabilities of the states, and it is not an estimation period. The periods of an individual
+must be consecutive; panels may be unbalanced.
+
+A latent variable $U_{it}\in\{1,\dots,k\}$ indicates the state of individual $i$ in period $t$. The
+model has three blocks: the \emph{measurement model}, the distribution of $\yv_{it}$ given the state;
+the \emph{initial probabilities} of the states; and the \emph{transition probabilities}.
+
+\subsection{Measurement model}
+
+Given $U_{it}=c$, the conditional means of the two counts are
+\begin{equation}\label{eq:mean}
+\log\mu_{jitc}=\alpha_{jc}+\xv_{jit}\bm\beta_j+\gamma_{j1}\,g(y_{1i,t-1})+\gamma_{j2}\,g(y_{2i,t-1}),
+\qquad j=1,2,
+\end{equation}
+where $\alpha_{jc}$ are the state intercepts (support points), $\bm\beta_j$ the slopes of the
+regressors and $g(\cdot)$ a transformation of the lagged counts (Section~\ref{sec:lags}). There is no
+common constant: the $k$ intercepts of each equation take its place. A single latent chain moves both
+intercepts together: the state is a joint characteristic of the individual, such as a health status,
+that shifts the demand for both services.
+
+$\gamma_{11}$ and $\gamma_{22}$ measure state dependence \emph{within} each outcome, $\gamma_{12}$ and
+$\gamma_{21}$ state dependence \emph{between} outcomes, for example the effect of past primary care on
+current emergency care. Because the margins are Poisson in all three forms of dependence (below), the
+coefficients keep their usual interpretation as semi-elasticities of $\E(y_{jit}\mid U_{it}=c)$.
+
+\paragraph{State-specific slopes.} With the options \cmd{statevary()} and \cmd{lagvary()}, chosen
+slopes in \eqref{eq:mean} become specific to the state, $\bm\beta_{jc}$ or $\gamma_{jlc}$. They are
+reported in the equations \textit{depvar}\cmd{\_s1}, \dots, \textit{depvar}\cmd{\_s}$k$.
+
+\subsection{Dependence between the two counts}\label{sec:dep}
+
+The joint probability $p(y_1,y_2\mid\mu_1,\mu_2)$ of the two counts in a state has Poisson margins
+with means $\mu_1$ and $\mu_2$ in all three forms. The subscripts $i,t,c$ are dropped in this section.
+
+\paragraph{Famoye form (default).} Following \citet{lakshminarayana1999} and \citet{famoye2010},
+\begin{equation}\label{eq:famoye}
+p(y_1,y_2)=\frac{\mu_1^{y_1}e^{-\mu_1}}{y_1!}\,\frac{\mu_2^{y_2}e^{-\mu_2}}{y_2!}
+\Big[1+\lambda\,\phi_1(y_1)\,\phi_2(y_2)\Big],
+\qquad \phi_j(y)=e^{-y}-e^{-q\mu_j},\quad q=1-e^{-1}.
+\end{equation}
+This is a Sarmanov distribution with mixing functions $\phi_j$. Three properties matter.
+\begin{enumerate}
+\item \emph{The margins are exactly Poisson.} If $Y\sim\mathrm{Po}(\mu)$, then
+$\E(e^{-Y})=e^{-q\mu}$, so $\E\,\phi_j(Y_j)=0$ and $\lambda$ does not affect the margins.
+\item \emph{Covariance.} Since $\E\{Y\phi(Y)\}=-q\mu e^{-q\mu}$,
+\begin{equation}
+\operatorname{Cov}(Y_1,Y_2)=\lambda q^2\mu_1\mu_2\,e^{-q(\mu_1+\mu_2)},\qquad
+\rho=\lambda q^2\sqrt{\mu_1\mu_2}\,e^{-q(\mu_1+\mu_2)}.
+\end{equation}
+The sign of the correlation is that of $\lambda$; its size depends on the means, hence on the
+regressors and on the state.
+\item \emph{The admissible range of $\lambda$ depends on the means.} With $d_j=e^{-q\mu_j}$, the
+functions $\phi_j$ take values in $(-d_j,\,1-d_j]$, and $p\ge0$ for every $(y_1,y_2)$ requires
+\begin{equation}\label{eq:range}
+-\frac{1}{\max\{d_1d_2,\,(1-d_1)(1-d_2)\}}\;\le\;\lambda\;\le\;
+\frac{1}{\max\{(1-d_1)d_2,\,d_1(1-d_2)\}}.
+\end{equation}
+The interval changes with $(\mu_1,\mu_2)$, and the admissible set is its intersection over all
+observations and states. The attainable correlation is small when the means are large: for example,
+$|\rho|<0.01$ for $\mu_1=8$, $\mu_2=1$.
+\end{enumerate}
+\cmd{hmbivpois} keeps $\lambda$ inside the admissible interval during estimation
+(Section~\ref{sec:em}) and stores the interval at the estimates in \cmd{e(lambda\_lo)},
+\cmd{e(lambda\_hi)} and \cmd{e(lambda\_range)}.
+
+\paragraph{Copula forms.} With \cmd{dependence(frank)} and \cmd{dependence(normal)} the joint
+probability is the probability that a copula $C$ gives to the rectangle of the two counts
+\citep{cameron2004}:
+\begin{equation}\label{eq:copula}
+\begin{split}
+p(y_1,y_2)={}&C(F_1(y_1),F_2(y_2))-C(F_1(y_1-1),F_2(y_2))\\
+&-C(F_1(y_1),F_2(y_2-1))+C(F_1(y_1-1),F_2(y_2-1)),
+\end{split}
+\end{equation}
+where $F_j$ is the Poisson distribution function with mean $\mu_j$. The Frank copula
+\citep{frank1979,nelsen2006} is
+\begin{equation}
+C(u,v;\theta)=-\frac1\theta\log\Big(1+\frac{(e^{-\theta u}-1)(e^{-\theta v}-1)}{e^{-\theta}-1}\Big),
+\end{equation}
+with $\theta\in\mathbb R$ unrestricted and $\theta=0$ corresponding to independence (reported as
+\cmd{theta}). The normal copula is $C(u,v;\rho)=\Phi_2(\Phi^{-1}(u),\Phi^{-1}(v);\rho)$, estimated
+on the scale $\operatorname{atanh}\rho$ (reported as \cmd{athrho}; $\rho$ is in \cmd{e(rho)}). The
+copula forms allow stronger dependence than \eqref{eq:famoye}, of either sign, at the cost of a more
+expensive likelihood.
+
+Two numerical devices keep \eqref{eq:copula} accurate when the cell probability is very small, which
+happens often because each observation is evaluated under every state. First, each margin is written
+in lower-tail form when $y<\mu$ and in upper-tail form, on the reflected uniform, when $y\ge\mu$; for
+both copulas, reflecting one margin only changes the sign of the dependence parameter, so the
+rectangle never has its corners close to 1 and its probability is computed without cancellation.
+Second, for the normal copula the rectangle probability is computed as a one-dimensional integral
+over the margin with the shorter interval,
+\begin{equation}
+\int_{z_l}^{z_h}\varphi(z)\Big[\Phi\Big(\frac{z'_h-\rho z}{\sqrt{1-\rho^2}}\Big)-\Phi\Big(\frac{z'_l-\rho z}{\sqrt{1-\rho^2}}\Big)\Big]dz,
+\end{equation}
+by 12-point Gauss--Legendre quadrature; the integrand is positive and smooth, so the result is
+accurate in relative terms. Cells with $y_1=y_2=0$ use the bivariate normal distribution function
+directly.
+
+\paragraph{One dependence parameter per state.} With \cmd{lambdastate}, $\lambda$ (or $\theta$, or
+$\operatorname{atanh}\rho$) is specific to the state.
+
+\paragraph{Local independence.} Given the sequence of states and the lagged counts, the vectors
+$\yv_{it}$ are independent over time. Within a period, the two counts are dependent through
+$\lambda$ (or the copula parameter). The association between the two counts therefore has three
+sources: the lagged counts (state dependence), the persistent latent states (time-varying
+heterogeneity) and the within-state dependence (common contemporaneous shocks).
+
+\subsection{Transformations of the lagged counts}\label{sec:lags}
+
+The option \cmd{lagtransform()} sets $g(\cdot)$ in \eqref{eq:mean}, for both lags in both equations
+and for the presample counts in the initial probabilities:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Option & $g(y)$\\
+\midrule
+\cmd{linear} (default) & $y$\\
+\cmd{log1p} & $\log(1+y)$\\
+\cmd{logc(\#)} & $\log\max(y,\#)$, $0<\#\le1$\\
+\cmd{logzero} & $\log y$ if $y>0$, $0$ otherwise, plus the indicator $\mathbf 1(y=0)$\\
+\cmd{indicator} & $\mathbf 1(y>0)$\\
+\cmd{topcode(\#)} & $\min(y,\#)$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+With linear lags and $\gamma_{jj}>0$, the conditional mean grows exponentially in the past count, and
+the implied dynamics can be explosive. The log-type transformations make the model a log-linear
+autoregression in the counts, whose stability is governed by the matrix of lag coefficients
+\citep[see][]{blundell2002}. \cmd{estat stability} (Section~\ref{sec:stability}) diagnoses both
+cases.
+
+\subsection{The latent Markov chain}
+
+\paragraph{Initial probabilities.} Following the approach of \citet{heckman1981} and
+\citet{wooldridge2005} to initial conditions, the probabilities of the states in the first estimation
+period are a multinomial logit on covariates $\xv_{i0}$ (\cmd{initcov()}), on the transformed
+presample counts and on a constant, with state~1 as the base:
+\begin{equation}
+\pi_{ic}=\Pr(U_{i1}=c\mid\xv_{i0},\yv_{i0})=
+\frac{\exp(\delta_{0c}+\xv_{i0}\bm\delta_c+g(\yv_{i0})\bm\eta_c)}
+{1+\sum_{h=2}^{k}\exp(\delta_{0h}+\xv_{i0}\bm\delta_h+g(\yv_{i0})\bm\eta_h)},\qquad c=2,\dots,k.
+\end{equation}
+The likelihood is conditional on the presample period. The covariates of \cmd{initcov()} are taken at
+the first estimation period. The equations are reported as \cmd{init2}, \dots, \cmd{init}$k$.
+
+\paragraph{Transition probabilities.} Each row of the transition matrix is a multinomial logit with
+staying in the state as the base:
+\begin{equation}\label{eq:trans}
+\pi_{d\mid c,it}=\Pr(U_{it}=d\mid U_{i,t-1}=c)=
+\frac{\exp(\tau_{cd}+\wv_{it}\bm\psi_{cd})}{1+\sum_{h\ne c}\exp(\tau_{ch}+\wv_{it}\bm\psi_{ch})},
+\qquad d\ne c,
+\end{equation}
+reported in the equations \cmd{tr}$c$\cmd{\_}$d$. Four specifications are available:
+\begin{itemize}
+\item \emph{homogeneous} (default): no $\wv_{it}$, $k(k-1)$ parameters, as in \citet{laudicella2022};
+\item \emph{covariates}, \cmd{xtrans(}\textit{varlist}\cmd{)}: $\wv_{it}$ measured at the period of
+arrival $t$;
+\item \emph{time-varying}, \cmd{tvtrans}: period dummies in place of the constant, that is, a free
+transition matrix for each period of arrival; it can be combined with \cmd{xtrans()};
+\item \emph{no transitions}, \cmd{notransition}: the state of each individual is constant, which gives
+a latent class (finite mixture) model with the same measurement model.
+\end{itemize}
+
+\subsection{Number of parameters}
+
+With $p_j$ common slopes, $s_j$ state-specific slopes, $m$ covariates in \cmd{initcov()} and $r$
+covariates of the transitions, the model has
+\[
+\underbrace{\textstyle\sum_j(p_j+k+k s_j)}_{\text{measurement}}+\underbrace{n_\lambda}_{1\text{ or }k}
++\underbrace{(k-1)(m+L+1)}_{\text{initial}}+\underbrace{k(k-1)(1+r)}_{\text{transitions}}
+\]
+free parameters, where $L$ is the number of features of the transformed presample counts; with \cmd{tvtrans} the constant of each transition logit is replaced by one dummy per
+period of arrival.
+
+%=====================================================================
+\section{Likelihood and estimation}\label{sec:estimation}
+%=====================================================================
+
+\subsection{Likelihood}
+
+Let $f_{itc}=p(\yv_{it}\mid U_{it}=c,\xv_{it},\yv_{i,t-1})$. The likelihood of individual $i$ sums
+over all the sequences of states,
+\begin{equation}
+L_i=\sum_{c_1=1}^k\cdots\sum_{c_{T_i}=1}^k\pi_{ic_1}f_{i1c_1}\prod_{t=2}^{T_i}\pi_{c_t\mid c_{t-1},it}\,f_{itc_t},
+\qquad \ell(\bm\vartheta)=\sum_{i=1}^n\log L_i,
+\end{equation}
+and is computed by the forward recursion \citep{baum1970,zucchini2016}
+\begin{equation}
+a_{i1}(c)=\pi_{ic}f_{i1c},\qquad
+a_{it}(d)=\Big[\sum_{c}a_{i,t-1}(c)\,\pi_{d\mid c,it}\Big]f_{itd},\qquad
+L_i=\sum_c a_{iT_i}(c).
+\end{equation}
+The recursion is scaled: at each $t$ the vector $a_{it}$ is normalized to sum to one and the log of
+the scale factor is accumulated, so that long panels do not underflow. Individuals are sorted by
+decreasing $T_i$, so that those observed at period $t$ are the first rows of the data; the recursions
+are then vectorized over individuals, with no loop over $i$, and unbalanced panels need no special
+treatment.
+
+\subsection{The EM algorithm}\label{sec:em}
+
+Estimation follows the EM algorithm \citep{dempster1977} as adapted to latent Markov models by
+\citet{bartolucci2013}. The complete-data log likelihood separates into three blocks: the measurement
+model, the initial probabilities and the transitions.
+
+\paragraph{E-step.} The forward--backward recursions give the posterior probabilities of the states,
+$\tilde w_{itc}=\Pr(U_{it}=c\mid\yv_i)$, and the joint posteriors of consecutive states,
+$\tilde z_{it}(c,d)=\Pr(U_{i,t-1}=c,U_{it}=d\mid\yv_i)$.
+
+\paragraph{M-step.} Each block is updated given the posteriors.
+\begin{itemize}
+\item \emph{Measurement model:} the bivariate regression with state intercepts, with weights
+$\tilde w_{itc}$, is updated by Newton steps with step halving until the expected complete log
+likelihood does not decrease. With the Famoye form the Hessian is analytic and two steps are taken
+per iteration; with the copulas minus the outer product of the scores replaces the second
+derivatives and one step is taken, because each evaluation costs more. With the Famoye form, every
+trial point is made admissible by projecting $\lambda$ onto the interval \eqref{eq:range} at the trial
+means; a $\lambda$ on a bound with the gradient pointing outwards is left out of the Newton system
+(active set), so that the other parameters keep moving.
+\item \emph{Initial probabilities:} a fractional multinomial logit with responses $\tilde w_{i1c}$,
+fitted by Newton--Raphson.
+\item \emph{Transitions:} with the homogeneous chain the update has the closed form
+$\hat\pi_{d\mid c}\propto\sum_{i,t}\tilde z_{it}(c,d)$; with \cmd{xtrans()} or \cmd{tvtrans}, one
+weighted multinomial logit per origin state $c$, with responses $\tilde z_{it}(c,\cdot)$.
+\end{itemize}
+The algorithm stops when the relative change of the log likelihood falls below
+\cmd{emtolerance()} (default $10^{-8}$) or after \cmd{emiterate()} iterations (default 500).
+
+\paragraph{Direct maximization.} If the EM has not converged, or if \cmd{technique()} is specified,
+the marginal log likelihood is maximized directly with \cmd{optimize()} (BFGS by default). The
+analytic score is computed by the Fisher identity: the score of $\ell$ equals the expected
+complete-data score under the posteriors, at the cost of one forward--backward pass.
+
+\paragraph{Starting values.} By default the slopes start from univariate Poisson regressions of the
+two counts, the state intercepts from the Poisson constant plus offsets spread evenly between $-0.8$
+and $0.8$, the dependence parameter from zero, the initial logit from zero and the chain from a
+persistent matrix with staying probability 0.9. Starting values can be given with \cmd{from()}. As
+with any finite mixture, the likelihood can have local maxima; trying several starting values is
+advisable in applications.
+
+\paragraph{Labelling of the states.} After estimation the states are relabelled in increasing order of
+the sample mean of the fitted $\mu_{1c}$ (\cmd{sortby(eq1)}, the default) or $\mu_{2c}$
+(\cmd{sortby(eq2)}); with common slopes this is the order of the state intercepts. This makes the
+output stable across runs and comparable across values of $k$.
+
+\subsection{Variance}
+
+The default variance is the inverse of the observed information, computed by central differences of
+the analytic score \citep{mclachlan2000}. A Famoye $\lambda$ that lies on a bound of its admissible
+interval is held fixed: its rows and columns of $\mathbf V$ are zero, and \cmd{e(n\_bound)} counts such
+parameters. \cmd{vce(robust)} gives the sandwich estimator clustered on the individuals, built from the
+individual contributions to the score.
+
+%=====================================================================
+\section{Inference and postestimation}\label{sec:post}
+%=====================================================================
+
+\subsection{Number of states}
+
+\cmd{estat ic} reports the log likelihood, the number of parameters, AIC and
+$\mathrm{BIC}=-2\ell+\#\text{par}\cdot\log n$ with $n$ the number of \emph{individuals}, the standard
+choice in latent Markov models \citep{bartolucci2013}; \cmd{n()} changes it. It also reports the
+relative entropy of the classification,
+\[
+1-\frac{\sum_{i,t,c}-\tilde w_{itc}\log\tilde w_{itc}}{N\log k},
+\]
+which equals one when the states are known with certainty ($N$ is the number of estimation periods).
+
+\subsection{Transition probabilities}
+
+\cmd{estat transition} reports the transition matrix, the expected duration of a stay in each state,
+$1/(1-\pi_{c\mid c})$, and the mean initial probabilities, with delta-method standard errors; the
+confidence intervals of the probabilities are computed on the logit scale. With heterogeneous
+transitions the reported matrix is the mean over the transition rows, or over those into one period
+with \cmd{period()}.
+
+\subsection{Test of no transitions}
+
+Under $H_0$: $\pi_{d\mid c}=0$ for all $d\ne c$, the states are constant and the model is a latent
+class model. $H_0$ lies on the boundary of the parameter space, so the likelihood-ratio statistic does
+not have the usual $\chi^2$ distribution. Following \citet{bartolucci2006}, its null distribution is a
+chi-bar-squared, a mixture
+\[
+\Pr(LR\le x)=\sum_{j=0}^{k(k-1)}\omega_j\,\Pr(\chi^2_j\le x),
+\]
+whose weight $\omega_j$ is the probability that the projection of a $N(\mathbf 0,\mathbf I^{-1})$
+vector onto the nonnegative orthant has $j$ positive components, where $\mathbf I$ is the information
+on the off-diagonal transition probabilities net of the other parameters, at the restricted estimates.
+\cmd{estat lrtrans} fits the restricted model (twice, from the default starting values and from the
+unrestricted estimates, keeping the larger likelihood), estimates $\mathbf I$ from the outer product of
+the individual scores, and estimates the weights by \cmd{reps()} simulated projections (default
+10\,000), each solved as a nonnegative least squares problem \citep{lawson1974}. It also reports the
+$p$-value from the $\chi^2_{k(k-1)}$ distribution, which is conservative.
+
+\subsection{Predictions}
+
+\cmd{predict} computes, for the estimation sample, statistics that average over the states with
+weights given by one of four sets of state probabilities:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Weights & Probability of $U_{it}=c$ given\\
+\midrule
+posterior (default) & all the outcomes of the individual, $\tilde w_{itc}$\\
+\cmd{filtered} & the outcomes up to period $t$\\
+\cmd{onestep} & the outcomes up to period $t-1$\\
+\cmd{prior} & the covariates and the presample counts only\\
+\cmd{instate(\#)} & the statistic in state \# \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The statistics are the expected counts \cmd{mu1}, \cmd{mu2}; the state probabilities \cmd{postprob};
+the most likely state of each period \cmd{state}; the most likely sequence of states of each
+individual \cmd{viterbi}, by the Viterbi algorithm in logs \citep{viterbi1967}; the within-state
+correlation \cmd{rho}; and the probability of a pair of counts \cmd{pr(}$a,b$\cmd{)}. For the
+copulas, $\rho$ is computed from
+$\operatorname{Cov}(Y_1,Y_2)=\sum_{a,b\ge0}[C(F_1(a),F_2(b))-F_1(a)F_2(b)]$, summed until the upper
+tails of both margins are negligible. The one-step weights give a check on the fit: the sum over the
+sample of $\log\cmd{pr}(y_{1it},y_{2it})$ with \cmd{onestep} equals the log likelihood.
+
+\subsection{Average marginal effects}
+
+\cmd{estat ame} reports average marginal effects on $\E(y_1)$ and $\E(y_2)$ with the state
+probabilities held fixed:
+\[
+\mathrm{AME}=\frac1N\sum_{i,t}\sum_{c}\Pr(U_{it}=c\mid\cdot)\,
+\frac{\mu_{jitc}(A)-\mu_{jitc}(B)}{\Delta},
+\]
+where $A$ and $B$ are two counterfactual designs: the regressor shifted by $\pm h$ for continuous
+variables ($\Delta=2h$), a level and the base level for factor variables ($\Delta=1$), one more count
+of a lagged outcome ($\Delta=1$). The weights are those of \cmd{predict}. Standard errors are by the
+delta method. Variables coded 0/1 without \cmd{i.} are treated as continuous. \cmd{margins} is not
+supported.
+
+\subsection{Stability of the dynamics}\label{sec:stability}
+
+\cmd{estat stability} checks whether the dynamics of the lagged counts can explode. It reports the lag
+coefficients by state and:
+\begin{itemize}
+\item with linear lags, the index $\gamma_{jj}\exp(a)$ of the univariate map $y\mapsto\exp(a+\gamma_{jj}y)$,
+where $a$ is a high quantile of the rest of the linear predictor; the map has a fixed point only if the
+index does not exceed $e^{-1}$;
+\item with log-type lags, the spectral radius of the $2\times2$ matrix of the coefficients of
+$g(y_1)$ and $g(y_2)$, which must be below one;
+\item the share of deterministic paths, from every observation and in every state, whose expected count
+exceeds \cmd{limit()} (default 1000) within \cmd{horizon()} periods (default 50);
+\item the same share for \cmd{nsim()} simulated paths per individual of the estimated model, with the
+state drawn from its posterior probabilities and the estimated chain.
+\end{itemize}
+
+%=====================================================================
+\section{The command}\label{sec:command}
+%=====================================================================
+
+\subsection{Syntax}
+
+\begin{lstlisting}
+hmbivpois (depvar1 = [indepvars1] [, eqopts]) (depvar2 = [indepvars2] [, eqopts])
+          [if] [in], id(varname) time(varname) k(#) [options]
+\end{lstlisting}
+
+The data are in long form, one observation per individual and period. \textit{indepvars},
+\cmd{statevary()} and \cmd{xtrans()} may contain factor variables. The main options are:
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Option & Description\\
+\midrule
+\multicolumn{2}{l}{\emph{Equation options}}\\
+\cmd{statevary(}\textit{varlist}\cmd{)} & regressors with state-specific coefficients\\
+\cmd{lagvary(}\textit{depvars}\cmd{)} & lagged outcomes with state-specific coefficients\\
+\midrule
+\multicolumn{2}{l}{\emph{Model}}\\
+\cmd{id()}, \cmd{time()}, \cmd{k(\#)} & individual, integer period, number of states (required)\\
+\cmd{initcov(}\textit{varlist}\cmd{)} & covariates of the initial probabilities\\
+\cmd{dependence(}\textit{form}\cmd{)} & \cmd{famoye} (default), \cmd{frank} or \cmd{normal}\\
+\cmd{lambdastate} & one dependence parameter per state\\
+\cmd{lagtransform(}\textit{g}\cmd{)} & transformation of the lagged counts (Section~\ref{sec:lags})\\
+\midrule
+\multicolumn{2}{l}{\emph{Transitions}}\\
+\cmd{xtrans(}\textit{varlist}\cmd{)} & covariates of the transitions, at the period of arrival\\
+\cmd{tvtrans} & a free transition matrix for each period of arrival\\
+\cmd{notransition} & no transitions (latent class model)\\
+\midrule
+\multicolumn{2}{l}{\emph{Estimation and reporting}}\\
+\cmd{emiterate(\#)}, \cmd{emtolerance(\#)} & EM iterations (500) and tolerance ($10^{-8}$)\\
+\cmd{emonly}, \cmd{technique()}, \cmd{iterate(\#)} & control of the direct maximization\\
+\cmd{from(}\textit{matname}\cmd{)} & starting values, in the order of \cmd{e(b)}\\
+\cmd{sortby(eq1|eq2|none)} & labelling of the states\\
+\cmd{vce(oim|robust)}, \cmd{level(\#)}, \cmd{nolog} & variance and display\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Postestimation:
+\begin{lstlisting}
+predict [type] newvar | stub* [if] [in] [, mu1 mu2 postprob state viterbi rho pr(a,b)
+        filtered onestep prior instate(#)]
+estat ic [, n(#)]
+estat transition [, period(#) level(#)]
+estat lrtrans [, reps(#) seed(#)]
+estat stability [, horizon(#) limit(#) nsim(#) seed(#)]
+estat ame [, prior onestep filtered instate(#) level(#)]
+\end{lstlisting}
+
+The stored results are listed in \cmd{help hmbivpois}.
+
+\subsection{Installation}
+
+\begin{lstlisting}
+net install hmbivpois, from("https://raw.githubusercontent.com/plidonni/hmbivpois/main/") replace
+net get hmbivpois, from("https://raw.githubusercontent.com/plidonni/hmbivpois/main/") replace
+\end{lstlisting}
+The first command installs the command and its help file; the second downloads into the current
+folder the example dataset \cmd{hmbivpois\_example.dta} and the do-file \cmd{hmbivpois\_examples.do},
+which runs all the examples below. Stata 16 or later is required.
+
+\subsection{Examples}
+
+The example dataset is simulated from the model with $n=1000$ individuals, a presample period and
+$T=6$ estimation periods, $k=3$ states, the Famoye form with $\lambda=-0.5$ and homogeneous
+transitions. The true values are listed in Table~\ref{tab:true}; the variable \cmd{state} holds the
+true latent state.
+
+\begin{table}[h]
+\centering\small
+\caption{True parameters of the example dataset}\label{tab:true}
+\begin{tabular}{ll}
+\toprule
+Block & Values\\
+\midrule
+Equation $y_1$ & $x_{11}=0.4$, $x_{12}=-0.3$, $\gamma_{11}=0.03$, $\gamma_{12}=-0.05$, $\alpha_{1}=(-0.3,\,0.7,\,1.5)$\\
+Equation $y_2$ & $x_{21}=0.3$, $x_{22}=-0.4$, $\gamma_{21}=-0.10$, $\gamma_{22}=0.10$, $\alpha_{2}=(-2.5,\,-1.5,\,-0.6)$\\
+Dependence & $\lambda=-0.5$\\
+Initial (states 2, 3) & $z_1=(0.5,1.0)$, $y_{1,0}=(0.15,0.30)$, $y_{2,0}=(0.30,0.50)$, constant $=(-0.5,-2.0)$\\
+Transitions & $\Pi=\begin{pmatrix}0.85&0.12&0.03\\0.08&0.84&0.08\\0.03&0.12&0.85\end{pmatrix}$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\medskip\noindent\textbf{Base model.}\par\nopagebreak
+\begin{lstlisting}
+use hmbivpois_example, clear
+hmbivpois (y1 = x11 x12) (y2 = x21 x22), id(id) time(time) k(3) initcov(z1)
+\end{lstlisting}
+The output reports, for each equation, the slopes, the lag coefficients (\cmd{lag\_y1},
+\cmd{lag\_y2}) and the state intercepts (\cmd{state1}, \dots), followed by $\lambda$, the initial logit
+(\cmd{init2}, \cmd{init3}) and the transition logits (\cmd{tr1\_2}, \dots).
+
+\medskip\noindent\textbf{Postestimation.}\par\nopagebreak
+\begin{lstlisting}
+estat ic
+estat transition
+estat ame
+predict double pp*, postprob
+predict s_hat, viterbi
+tabulate state s_hat if time > 0
+estat lrtrans
+\end{lstlisting}
+With simulated data, the cross-tabulation of the true state and of the Viterbi path shows how well the
+states are recovered.
+
+\medskip\noindent\textbf{Choice of the number of states.}\par\nopagebreak
+\begin{lstlisting}
+forvalues k = 1/4 {
+    quietly hmbivpois (y1 = x11 x12) (y2 = x21 x22), id(id) time(time) k(`k') initcov(z1) nolog
+    estat ic
+}
+\end{lstlisting}
+
+\medskip\noindent\textbf{Extensions.}\par\nopagebreak
+\begin{lstlisting}
+hmbivpois (y1 = x11 x12, statevary(x11)) (y2 = x21 x22), id(id) time(time) ///
+    k(3) initcov(z1) dependence(frank) xtrans(z1) lagtransform(log1p)
+estat stability
+\end{lstlisting}
+This specification uses the Frank copula, lets the slope of $x_{11}$ differ across states, makes the
+transitions depend on $z_1$ and transforms the lags by $\log(1+y)$. It is misspecified for the example
+data, which were generated without these features, and serves only to illustrate the syntax.
+
+\paragraph{Practical advice.}
+\begin{itemize}
+\item Fit the model for increasing $k$ and compare the BIC; check the entropy and the size of the
+smallest state.
+\item Re-estimate with different starting values (\cmd{from()}) to guard against local maxima,
+especially for $k\ge3$.
+\item With the Famoye form, a $\lambda$ on a bound of its admissible interval (\cmd{e(n\_bound)}$>0$)
+signals that the data call for stronger dependence than the form allows: try a copula.
+\item With linear lags and large counts, run \cmd{estat stability}, or use a log-type
+\cmd{lagtransform()}.
+\end{itemize}
+
+%=====================================================================
+\section{Monte Carlo evidence}\label{sec:mc}
+%=====================================================================
+
+The command was tested with simulation experiments, each with $n=2000$ individuals, a presample period,
+$T=8$ estimation periods and $k=3$ states, using the design of Table~\ref{tab:true} for the
+measurement model, the initial probabilities and the chain, with the changes listed in
+Table~\ref{tab:mc}. For the estimators, the table reports the ratio between the Monte Carlo standard
+deviation of the estimates and the mean estimated standard error (one if the standard errors are
+correct), and the coverage of the nominal 95\% confidence intervals, as ranges over all the
+parameters.
+
+\begin{table}[h]
+\centering\small
+\caption{Monte Carlo results ($n=2000$, $T=8$, $k=3$)}\label{tab:mc}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.3cm}cXX}
+\toprule
+Design & Reps & MC s.d./mean s.e.: mean [min, max] & Coverage of 95\% CI [min, max]\\
+\midrule
+Frank copula, $\theta=3$ & 100 & 0.998 [0.879, 1.095] & [0.920, 0.990]\\
+Normal copula, $\rho=0.5$ & 200 & 1.008 [0.935, 1.100] & [0.925, 0.985]\\
+Transition probabilities (\cmd{estat transition}), Famoye, $\lambda=-0.5$ & 100 & 0.947 [0.833, 1.031] & [0.940, 0.980]\\
+Full model: Frank $\theta=3$, slope of $x_{11}$ by state, transitions on a covariate & 100 & 1.007 [0.904, 1.101] & [0.910, 0.980]\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Test of no transitions.} With data generated without transitions (Famoye, $\lambda=-0.5$,
+100 replications), the rejection rates of \cmd{estat lrtrans} at the 10\%, 5\% and 1\% levels were
+0.100, 0.050 and 0.010 with the chi-bar-squared distribution, against 0.010, 0.010 and 0.000 with the
+$\chi^2_6$ distribution, which is markedly conservative. The mean LR statistic was 2.20, close to the
+mean of the estimated chi-bar-squared distribution (2.56) and far from that of $\chi^2_6$.
+
+\paragraph{Other checks.} With $\theta=0$ the Frank copula and with $\lambda=0$ the Famoye form give the
+same log likelihood, as they must under independence. With the Frank copula, the likelihood-ratio test
+of a common $\theta$ against one per state did not reject when the true $\theta$ was common
+($\chi^2_2=1.58$, $p=0.45$).
+
+\paragraph{Caveat.} In the full-model design the largest bias relative to its Monte Carlo standard error
+(4.6) concerns the constant of the transition from state 1 to state 3, the rarest transition of the
+design (probability 0.03); its bias, $-0.098$, is small relative to its standard error (0.21). With
+100 replications such a result is compatible with finite-sample bias of a parameter identified by few
+transitions, but it suggests caution when interpreting rare transitions in small samples.
+
+%=====================================================================
+\section*{Citation}
+%=====================================================================
+If you use \cmd{hmbivpois}, please cite \citet{laudicella2022} and
+
+\smallskip
+\noindent Li Donni, P. 2026. hmbivpois: Stata module to fit hidden Markov bivariate Poisson regression for
+panel counts. \url{https://github.com/plidonni/hmbivpois}.
+
+\begin{thebibliography}{99}
+\bibitem[Bartolucci(2006)]{bartolucci2006}
+Bartolucci, F. 2006. Likelihood inference for a class of latent Markov models under linear hypotheses on
+the transition probabilities. \textit{Journal of the Royal Statistical Society, Series B} 68: 155--178.
+
+\bibitem[Bartolucci et~al.(2013)]{bartolucci2013}
+Bartolucci, F., A. Farcomeni, and F. Pennoni. 2013. \textit{Latent Markov Models for Longitudinal Data}.
+Boca Raton, FL: Chapman \& Hall/CRC.
+
+\bibitem[Baum et~al.(1970)]{baum1970}
+Baum, L. E., T. Petrie, G. Soules, and N. Weiss. 1970. A maximization technique occurring in the
+statistical analysis of probabilistic functions of Markov chains. \textit{Annals of Mathematical
+Statistics} 41: 164--171.
+
+\bibitem[Blundell et~al.(2002)]{blundell2002}
+Blundell, R., R. Griffith, and F. Windmeijer. 2002. Individual effects and dynamics in count data
+models. \textit{Journal of Econometrics} 108: 113--131.
+
+\bibitem[Cameron et~al.(2004)]{cameron2004}
+Cameron, A. C., T. Li, P. K. Trivedi, and D. M. Zimmer. 2004. Modelling the differences in counted
+outcomes using bivariate copula models with application to mismeasured counts. \textit{Econometrics
+Journal} 7: 566--584.
+
+\bibitem[Dempster et~al.(1977)]{dempster1977}
+Dempster, A. P., N. M. Laird, and D. B. Rubin. 1977. Maximum likelihood from incomplete data via the EM
+algorithm. \textit{Journal of the Royal Statistical Society, Series B} 39: 1--38.
+
+\bibitem[Famoye(2010)]{famoye2010}
+Famoye, F. 2010. On the bivariate negative binomial regression model. \textit{Journal of Applied
+Statistics} 37: 969--981.
+
+\bibitem[Frank(1979)]{frank1979}
+Frank, M. J. 1979. On the simultaneous associativity of $F(x,y)$ and $x+y-F(x,y)$.
+\textit{Aequationes Mathematicae} 19: 194--226.
+
+\bibitem[Heckman(1981)]{heckman1981}
+Heckman, J. J. 1981. The incidental parameters problem and the problem of initial conditions in
+estimating a discrete time--discrete data stochastic process. In \textit{Structural Analysis of
+Discrete Data with Econometric Applications}, ed. C. F. Manski and D. McFadden, 179--195. Cambridge, MA:
+MIT Press.
+
+\bibitem[Lakshminarayana et~al.(1999)]{lakshminarayana1999}
+Lakshminarayana, J., S. N. N. Pandit, and K. Srinivasa Rao. 1999. On a bivariate Poisson distribution.
+\textit{Communications in Statistics -- Theory and Methods} 28: 267--276.
+
+\bibitem[Laudicella and Li Donni(2022)]{laudicella2022}
+Laudicella, M., and P. Li Donni. 2022. The dynamic interdependence in the demand of primary and emergency
+secondary care: A hidden Markov approach. \textit{Journal of Applied Econometrics} 37: 521--536.
+
+\bibitem[Lawson and Hanson(1974)]{lawson1974}
+Lawson, C. L., and R. J. Hanson. 1974. \textit{Solving Least Squares Problems}. Englewood Cliffs, NJ:
+Prentice-Hall.
+
+\bibitem[McLachlan and Peel(2000)]{mclachlan2000}
+McLachlan, G., and D. Peel. 2000. \textit{Finite Mixture Models}. New York: Wiley.
+
+\bibitem[Nelsen(2006)]{nelsen2006}
+Nelsen, R. B. 2006. \textit{An Introduction to Copulas}. 2nd ed. New York: Springer.
+
+\bibitem[Viterbi(1967)]{viterbi1967}
+Viterbi, A. J. 1967. Error bounds for convolutional codes and an asymptotically optimum decoding
+algorithm. \textit{IEEE Transactions on Information Theory} 13: 260--269.
+
+\bibitem[Wooldridge(2005)]{wooldridge2005}
+Wooldridge, J. M. 2005. Simple solutions to the initial conditions problem in dynamic, nonlinear panel
+data models with unobserved heterogeneity. \textit{Journal of Applied Econometrics} 20: 39--54.
+
+\bibitem[Zucchini et~al.(2016)]{zucchini2016}
+Zucchini, W., I. L. MacDonald, and R. Langrock. 2016. \textit{Hidden Markov Models for Time Series: An
+Introduction Using R}. 2nd ed. Boca Raton, FL: Chapman \& Hall/CRC.
+\end{thebibliography}
+
+\end{document}

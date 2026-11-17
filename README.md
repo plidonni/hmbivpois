@@ -16,7 +16,7 @@ To download the example dataset and the do-file with the examples into the curre
 net get hmbivpois, from("https://raw.githubusercontent.com/plidonni/hmbivpois/main/") replace
 ```
 
-Requires Stata 16 or later. Then type `help hmbivpois`.
+Requires Stata 16 or later. Then type `help hmbivpois`. The technical guide is [`doc/hmbivpois_guide.pdf`](doc/hmbivpois_guide.pdf).
 
 ## Quick start
 
@@ -49,6 +49,7 @@ The data are in long form, one row per individual and period. The first observed
 | `hmbivpois.sthlp` | help file |
 | `hmbivpois_example.dta` | simulated example data |
 | `hmbivpois_examples.do` | runs the examples of the help file |
+| `doc/hmbivpois_guide.pdf` | technical guide: model, estimation, postestimation, Monte Carlo evidence (LaTeX source in `doc/`) |
 | `stata.toc`, `hmbivpois.pkg` | installation files for `net install` / `net get` |
 
 ## Example data
@@ -72,7 +73,7 @@ If you use `hmbivpois`, please cite:
 
 ## Development
 
-The model and its extensions were specified by the author. Parts of the Stata and Mata code were written with the assistance of an AI coding tool (Claude, Anthropic); the code was tested by the author with Monte Carlo simulations.
+The model and its extensions were specified by the author. Parts of the Stata and Mata code were improved with the assistance of an AI coding tool (Claude, Anthropic); the code was tested by the author with Monte Carlo simulations.
 
 ## License
 
@@ -80,4 +81,4 @@ MIT License, see `LICENSE`.
 
 ## Author
 
-Paolo Li Donni. Please report bugs and suggestions as [issues](https://github.com/plidonni/hmbivpois/issues).
+Paolo Li Donni, University of Palermo, [paolo.lidonni@unipa.it](mailto:paolo.lidonni@unipa.it), [personal webpage](https://sites.google.com/site/plidonni/). Please report bugs and suggestions as [issues](https://github.com/plidonni/hmbivpois/issues).
