@@ -1,6 +1,6 @@
 *! version 1.0.0  17nov2026
 *! predict after hmbivpois. The program is in hmbivpois.ado (subprogram Predict),
-*! which holds the whole command: this file only hands the request over.
+*! which holds the whole command: this file only hands the request over. 
 *!
 *!   predict [type] {newvar | stub* | newvarlist} [if] [in] [, statistic weights]
 *!

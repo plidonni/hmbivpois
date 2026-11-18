@@ -2,7 +2,7 @@
 
 **Hidden Markov bivariate Poisson regression for panel counts in Stata**
 
-`hmbivpois` fits the hidden Markov bivariate Poisson model of Laudicella and Li Donni (2022) to two counts observed on the same individuals over time, for example visits to primary care and emergency admissions. Given a latent state that follows a first-order Markov chain, the two counts have Poisson margins whose means depend on regressors, on the lagged counts and on the state.
+`hmbivpois` fits the hidden Markov bivariate Poisson model of Laudicella and Li Donni (2022) to two counts observed on the same individuals over time, for example visits to primary care and emergency admissions. Given a latent state that follows a first-order Markov chain, the two counts have Poisson margins whose means depend on regressors, on the lagged counts and on the state. 
 
 ## Installation
 

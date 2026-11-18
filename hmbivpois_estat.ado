@@ -26,7 +26,7 @@
 *!       the states held fixed (posterior by default): dy/dx for continuous
 *!       regressors, discrete change from the base level for factor levels,
 *!       one more count of each lagged outcome; delta-method standard errors
-*!   estat vce, estat summarize: as after any estimation command
+*!   estat vce, estat summarize: as after any estimation command 
 
 program define hmbivpois_estat
     version 16

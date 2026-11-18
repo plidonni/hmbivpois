@@ -1,4 +1,4 @@
-*! version 1.0.0  17nov2026
+*! version 1.0.1  18nov2026
 *! hmbivpois: hidden Markov bivariate Poisson regression for panel counts
 *! Model: Laudicella & Li Donni (2022, Journal of Applied Econometrics 37: 521-536)
 *! Author: Paolo Li Donni, https://github.com/plidonni/hmbivpois
@@ -3776,6 +3776,11 @@ real rowvector hmbp_lrw(struct hmbp_dat scalar M, real rowvector b,
         w[j+1] = w[j+1] + 1
     }
     rngstate(rs)
+    // No score (Kuhn-Tucker) statistic (it was in 0.5.2): the individual scores
+    // of the transition probabilities at P = I are sums of likelihood ratios
+    // between states, with very heavy tails; a statistic based on their outer
+    // product is badly calibrated (hmdbivpois_sim_04). The weights depend only
+    // on the shape of Q and the LR test keeps its size.
     return(w/reps)
 }
 

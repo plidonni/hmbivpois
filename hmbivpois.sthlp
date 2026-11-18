@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.0  17nov2026}{...}
+{* *! version 1.0.1  18nov2026}{...}
 {vieweralsosee "poisson" "help poisson"}{...}
 {vieweralsosee "xtset" "help xtset"}{...}
 {viewerjumpto "Syntax" "hmbivpois##syntax"}{...}
@@ -236,7 +236,11 @@ of chi2(0), ..., chi2(k(k-1)), whose weights are estimated by {opt reps()} simul
 from the information of the off-diagonal transition probabilities at the restricted estimates
 (Bartolucci 2006). The p-value of the chi2(k(k-1)) distribution, which is conservative, is also
 reported. The restricted model is fitted from two sets of starting values and the larger log
-likelihood is kept.
+likelihood is kept. Under the null hypothesis the maximum of the model with transitions is on the
+boundary, where the EM converges slowly and may stop early, which makes LR too small and the test
+conservative. No score test is reported: the individual scores of the transition probabilities are
+sums of likelihood ratios between states, with very heavy tails, and a score statistic based on their
+outer product is badly calibrated.
 
 {phang}
 {cmd:estat stability} [{cmd:,} {opt horizon(#)} {opt limit(#)} {opt nsim(#)} {opt seed(#)}] checks

@@ -5,7 +5,7 @@
 * Install the command and get the files first:
 *   net install hmbivpois, from("https://raw.githubusercontent.com/plidonni/hmbivpois/main/") replace
 *   net get hmbivpois, from("https://raw.githubusercontent.com/plidonni/hmbivpois/main/") replace
-*******************************************************************************
+******************************************************************************* 
 
 version 16
 clear all
